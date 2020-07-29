@@ -8,6 +8,9 @@ uploadDir: images
 dataDir: content/data
 pagesDir: content/pages
 pageLayoutKey: layout
+logicFields:
+  - doc_sections.root_docs_path
+  - doc_sections.sections
 pageData:
   - pagePath: /
     initialExpandedPaths:

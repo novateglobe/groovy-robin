@@ -1,18 +1,27 @@
 const path = require('path');
 const sourcebit = require('sourcebit');
-const sourcebitConfig = require('./sourcebit.js');
 const _ = require('lodash');
-const sass = require('node-sass');
-const sassUtils = require('node-sass-utils')(sass);
+
+const sourcebitConfig = require('./sourcebit.js');
+const createDeferredPromise = require('./src/utils/createDeferredPromise');
+const createGetPaletteKeyFunction = require('./src/utils/getPaletteKey');
 
 
-let configObject;
+const deferredPromise = createDeferredPromise();
+
 sourcebit.fetch(sourcebitConfig, (error, data) => {
-    configObject = _.find(data.objects, _.matchesProperty('__metadata.modelName', 'config'));
+    const configObject = _.find(data.objects, _.matchesProperty('__metadata.modelName', 'config'));
+    // resolve deferredPromise.promise
+    deferredPromise.resolve(configObject);
+    // create new resolved promise that will be resolved immediately
+    deferredPromise.promise = Promise.resolve(configObject);
 });
 
 module.exports = {
     exportTrailingSlash: true,
+    devIndicators: {
+        autoPrerender: false
+    },
     sassOptions: {
         // scss files might import plain css files from the "public" folder:
         // @import "example.css";
@@ -25,36 +34,8 @@ module.exports = {
             return null;
         },
         functions: {
-            "getPaletteKey($key)": function(sassKey) {
-                function hexToRgb(hex) {
-                    // Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
-                    let shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
-                    hex = hex.replace(shorthandRegex, function(m, r, g, b) {
-                        return r + r + g + g + b + b;
-                    });
-
-                    let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-                    return result ? {
-                        r: parseInt(result[1], 16),
-                        g: parseInt(result[2], 16),
-                        b: parseInt(result[3], 16)
-                    } : null;
-                }
-                let sassParams = configObject.palettes[configObject.palette].sass;
-                let key = sassKey.getValue();
-                let value = sassParams[key];
-                let colorRegExp = /^#(?:[a-f\d]{3}){1,2}$/i;
-                let result;
-                if (colorRegExp.test(value)) {
-                    result = hexToRgb(value);
-                    result = new sass.types.Color(result.r, result.g, result.b);
-                } else {
-                    result = sassUtils.castToSass(value)
-                }
-                return result;
-            }
+            "getPaletteKey($key)": createGetPaletteKeyFunction(deferredPromise)
         }
-        
     },
     webpack: (config, { webpack }) => {
         // Tell webpack to ignore watching content files in the content folder.
